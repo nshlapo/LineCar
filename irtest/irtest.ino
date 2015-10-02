@@ -9,5 +9,5 @@ void setup() {
 void loop() {
   sensorValue = analogRead(sensorPin);  //set sensorValue to current value of analog pin
   Serial.println(sensorValue);  //print sensor value
-  delay(1000);  //wait 1.5 second before printing next value
+  delay(1500);  //wait 1.5 second before printing next value
 } 
