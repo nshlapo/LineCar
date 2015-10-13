@@ -1,2 +1,2 @@
 # LineCar
-Resistior value = 10,000 ohms for 5V - leads to .5mA current
+This Principles of Engineering project is a line-following car that implements a PID control system using two infrared reflectivity sensors mounted on the front of the robot.
