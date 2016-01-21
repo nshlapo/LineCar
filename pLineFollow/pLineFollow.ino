@@ -1,4 +1,3 @@
-#include <PID_v1.h>
 #include <Wire.h>  //include Motor Liraries
 #include <Adafruit_MotorShield.h>
 #include "utility/Adafruit_PWMServoDriver.h"
@@ -17,7 +16,7 @@ long sensorValueL =0; //initializing sensor value
 int speedR;
 int speedL;
 int defaultSpeed = 50;
-double kP = ;
+double kP = 1;
 int ref = 0;
 
 void setup() {

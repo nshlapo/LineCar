@@ -1,4 +1,4 @@
-#include <PID_v1.h>
+//Adding Libraries for motor shield
 #include <Wire.h>  //include Motor Liraries
 #include <Adafruit_MotorShield.h>
 #include "utility/Adafruit_PWMServoDriver.h"
@@ -8,151 +8,119 @@ Adafruit_MotorShield AFMS2 = Adafruit_MotorShield();  //create motor shield obje
 Adafruit_DCMotor *MotorR = AFMS1.getMotor(1); //set up motor in port 1
 Adafruit_DCMotor *MotorL = AFMS2.getMotor(2); //set up motor 2
 
-//Define Variables we'll be connecting to
-double Setpoint1, Input1, Output1, Setpoint2, Input2, Output2;
-int kp = 1;
-int ki = 0;
-int kd = 1;
-
-//Specify the links and initial tuning parameters
-PID PID1(&Input1, &Output1, &Setpoint1, kp, ki, kd, DIRECT);
-PID PID2(&Input2, &Output2, &Setpoint2, kp, ki, kd, DIRECT);
-
+//Define Variables
 int setpoint_value = 0; //find true value
-int sensorPinR = A0; //the input pin for our IR sensor
-int sensorPinL = A1;
+int sensorPinR = A0; //the input pin for right IR sensor
+int sensorPinL = A1;  //input pin for left IR sesnor
 long sensorValueR = 0; //initializing sensor value
 long sensorValueL =0; //initializing sensor value
-int speedR = 50;
-int speedL = 50;
-int default_speed = 50;
-int calibration_variable = 1;
-int sensor_switch_point = 600;
-int turning_speed = 60;  //fast wheel during turn
-int low_speed = 0;      //slow wheel during turn
+int speedR;  //initalizing speed variables
+int speedL;
+int defaultSpeed = 40;  //speed that the robot will converge to
+double kP = .15; // proportinal value for PID control
+double kI = 0;   // integral value for PID control, not actually used in our functioning model
+double kD = .0001; //dampening value for PID control
+int ref = 0;  //temp variable for calculating error
+int sensorDiff = 0; //difference between the two sensor values
+
+//correctional values for PID
+int corrDiff = 0;
+int control = 0;
+int corrVal = 0;
+int corrStore = 0;
+int corri = 0;
+int corrf = 0;
+
+boolean moving = true;  //only keeps robot running if this is true
+
+byte input = 40;  // serial user input variables
+byte reading = 40;
 
 
 void setup() {
-  Serial.begin(115200);  //initalize serial monitor
-  pinMode(12,OUTPUT);
-  pinMode(13,OUTPUT);
-//  Input1 = analogRead(sensorPinR);
-//  Input2 = analogRead(sensorPinL);
-//  Setpoint1 = setpoint_value;
-//  Setpoint2 = setpoint_value;
-//  //turn the PID on
-//  PID1.SetMode(AUTOMATIC);
-//  PID2.SetMode(AUTOMATIC);
-  AFMS1.begin();
+  Serial.begin(250000);  //initalize serial monitor
+  AFMS1.begin();   // begin motors
   AFMS2.begin();
-  MotorR->setSpeed(default_speed);
-  MotorL->setSpeed(default_speed);
-  MotorR->run(FORWARD);
+  MotorR->setSpeed(defaultSpeed);  //set both motors too default speeds
+  MotorL->setSpeed(defaultSpeed);
+  MotorR->run(FORWARD);  //start running motors
   MotorL->run(FORWARD);
+  delay(5000);  //so matlab can get its shit together
+
 }
 
 
 void loop() {
+  reading = Serial.parseInt();  //make sure user input is one number (50) rather than 5 and then 0
+
+  if (moving){  //if robot is moving
+    defaultSpeed = input;  //set default speed to whatever the user input is
+
     //initialize the variables we're linked to
-  sensorValueR = analogRead(sensorPinR);  //set sensorValue to current value of analog pin
-  sensorValueL = analogRead(sensorPinL);  //set sensorValue to current value of analog pin
-  //Serial.print(sensorValueR);
-  //Serial.print(", ");
-  //Serial.println(sensorValueL);  //print sensor value
-  //Serial.print("Difference");
-  //Serial.println(sensorValueR-sensorValueL);
-  
-    if (sensorValueR-sensorValueL >= 350)  // if its is on the ground the value is low, on the tape it is high
-    {
-      MotorR->setSpeed(turning_speed);
-      MotorL->setSpeed(low_speed);
-      //Serial.println("Left Turn");
-      digitalWrite(12, HIGH);   // turn the LED on (HIGH is the voltage level)
-      digitalWrite(13, LOW);   // turn the LED on (HIGH is the voltage level)
+    sensorValueR = analogRead(sensorPinR);  //set sensorValue to current value of analog pin
+    sensorValueL = analogRead(sensorPinL);  //set sensorValue to current value of analog pin
+    sensorDiff = sensorValueR - sensorValueL;  //get difference between 2 sensors for PID
+    control = ref - sensorDiff;  //for integral - not actually used in final model
+    corri = control;
+    corrDiff = corrf - corri;
+    corrStore += (control);
 
-    }
-    else if (sensorValueL-sensorValueR >= 250) 
-    {
-      MotorL->setSpeed(turning_speed);
-      MotorR->setSpeed(low_speed);
-      digitalWrite(13, HIGH);   // turn the LED on (HIGH is the voltage level)
-      digitalWrite(12, LOW);   // turn the LED on (HIGH is the voltage level)
-      //Serial.println("Right Turn");
-    }  
-    else
-    {
-      MotorR->setSpeed(default_speed);
-      MotorL->setSpeed(default_speed);
-      //Serial.println("No Turn");
-      //digitalWrite(12, LOW);   // turn the LED on (HIGH is the voltage level)
-      //digitalWrite(13, LOW);   // turn the LED on (HIGH is the voltage level)
+    //make correctional value determined by proportinal difference in sensor value (kP)
+    //then dampen this (kD) so that the robot doesn't go cray
+    corrVal = (control)*kP + corrStore*kI + corrDiff*kD;
 
+    speedR = defaultSpeed - corrVal;  //change speeds of motors based on control PID algorithm
+    speedL = defaultSpeed + corrVal;
+
+    if (speedR < 0)  //making sure motors don't loop and go from 0 to 244 when it gets a negative
+    {
+      speedR =0;
     }
-  
-//    if (sensorValueR >=  sensor_switch_point)
-//    {
-//      Serial.print("Turn right motor, Speed: ");
-//      speedR -= (600-sensorValueR)*calibration_variable;
-//      MotorR->setSpeed(speedR);
-//      Serial.println(speedR);
-//    }
-//    else
-//    {
-//      MotorR->setSpeed(default_speed);
-//      Serial.println("No turn right motor, Speed: 50");
-//
-//    }
-//    
-//    if (sensorValueL >= sensor_switch_point)
-//    {
-//      Serial.print("Turn left motor, Speed: ");
-//      speedL -= (600-sensorValueL)*calibration_variable;
-//      MotorL->setSpeed(speedL);
-//      Serial.println(speedL)    ;
-//    }
-//    else
-//    {
-//      MotorL->setSpeed(default_speed);
-//      Serial.println("No turn left motor, Speed: 50");
-//
-//    }    
-//    Input1 = sensorValueR;
-//    Input2 = sensorValueL;
-//    PID1.Compute();
-//    PID2.Compute();
-//    
-//   if(Output1 !=0)
-//    {
-//      speed1 -= Output1*calibration_variable;
-//      MotorR->setSpeed(speed1);
-////      Serial.println("1 - turning");
-//      digitalWrite(12, LOW);   // turn the LED on (HIGH is the voltage level)
-//    }
-//    else
-//  {
-//    MotorR->setSpeed(default_speed);
-//    digitalWrite(12, HIGH);   // turn the LED on (HIGH is the voltage level)
-////      Serial.println("1 - not turning");
-//
-//  }
-////  
-//   if(Output2 !=0)
-//    {
-//      speed2 -= Output2*calibration_variable;
-//      MotorL->setSpeed(speed2);
-////      Serial.println("2 - turning");
-//      digitalWrite(13, LOW);   // turn the LED on (HIGH is the voltage level)
-//    }
-//    else
-//  {
-//    MotorL->setSpeed(speed2);
-////      Serial.println("2 - not turning");
-//      digitalWrite(13, HIGH);   // turn the LED on (HIGH is the voltage level)
-//  }
-    
-//    Serial.print(Output1);
-//    Serial.print(", ");
-//    Serial.println(Output2);
+
+    if (speedL < 0)
+    {
+      speedL =0;
+    }
+
+    MotorR->setSpeed(speedR  //reset motor speeds
+    MotorL->setSpeed(speedL);
+    corrf = corri;
     delay(5);  //wait 1 second before printing next value
 
-} 
+
+    //print a bunch of values to send to matlab for plotting
+    Serial.print(sensorValueR);
+    Serial.print(", ");
+    Serial.print(sensorValueL);
+    Serial.print(", ");
+    Serial.print(speedR);
+    Serial.print(", ");
+    Serial.print(speedL);
+    Serial.print(", ");
+    Serial.println(reading);
+
+    if (sensorValueR <=300 && sensorValueL <= 250)  //if both sensors are on the tape, stop running
+    {
+      moving = false;   //once its not running, send a bunch of 0s to matlab so that it knows to stop
+      Serial.print(0);
+      Serial.print(", ");
+      Serial.print(0);
+      Serial.print(", ");
+      Serial.print(0);
+      Serial.print(", ");
+      Serial.print(0);
+      Serial.print(", ");
+      Serial.println(0);
+    }
+
+    //user input things
+        if (reading > 0)  // if there is a user input (reading) that is greater than 0
+    {
+      input = reading;  // change the input to the value of the reading
+    }
+
+  }
+
+    delay(5);  //wait 1 second before printing next value
+
+}
